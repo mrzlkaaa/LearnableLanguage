@@ -1,0 +1,20 @@
+{
+  "project": null,
+  "status": "idle",
+  "plan": null,
+  "created_at": "2026-04-27T21:56:00+07:00",
+  "updated_at": "2026-04-27T21:56:00+07:00",
+  "tasks": {
+    "backend": {
+      "status": "idle",
+      "files": [],
+      "updated_at": null
+    },
+    "frontend": {
+      "status": "idle",
+      "files": [],
+      "updated_at": null
+    }
+  },
+  "notes": ""
+}

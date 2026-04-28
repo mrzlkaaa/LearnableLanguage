@@ -1,0 +1,25 @@
+# API Contract
+
+_(Заполняется при необходимости)_
+
+## Endpoints
+
+### POST /api/example
+
+**Request:**
+```json
+{
+  "field": "value"
+}
+```
+
+**Response (200):**
+```json
+{
+  "result": "ok"
+}
+```
+
+---
+
+_Создано: 2026-04-27_

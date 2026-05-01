@@ -62,23 +62,20 @@ async def get_new_words(callback: CallbackQuery, state: FSMContext, **kwargs):
 
     user_id = callback.from_user.id
     wls = kwargs["words_service"]
-    new_words = await wls.get_new_global_words(user_id)
-
-    # if not new_words:
-    #     await callback.message.edit_text(
-    #         "Предлагаю пока что новые слова не брать... С текущими бы разобраться",
-    #         reply_markup=get_back_inline()
-    #     )
-    #     return
-
+    
     await callback.message.edit_text(
         "Запрашиваю новые слова...",
         reply_markup=get_back_inline()
     )
     
+    new_words = await wls.get_new_global_words(user_id)
+    
     if not new_words:
+        srs_queue = await wls.vocab.get_srs_queue_count(user_id)
         await callback.message.edit_text(
-            "Лимит новых слов на сегодня закончился",
+            f"🔒 <b>Новые слова заблокированы!</b>\n\n"
+            f"У тебя {srs_queue} слов ждут повторения. Сначала повтори их!\n\n"
+            f"💡 Нажми 'Через карточки' → там будут слова на повтор",
             reply_markup=get_back_inline()
         )
         return
@@ -91,23 +88,22 @@ async def get_new_words(callback: CallbackQuery, state: FSMContext, **kwargs):
 async def get_next_card(state: FSMContext, direction: int = 1):
     data = await state.get_data()
     card_counter = data.get("card_counter", None)
+    words = data.get("words", [])
+    total = len(words)
 
-    if card_counter is not None:
-        if card_counter == len(data["words"]) - 1:
-            return None
-        
-        if direction and card_counter < len(data["words"]) - 1:
-            card_counter += 1
-        elif not direction and card_counter > 0:
-            card_counter -= 1
-    else:
+    if card_counter is None:
         card_counter = 0
-    print("counter: ", card_counter)
-    await state.update_data(
-        card_counter=card_counter
-    )
+    else:
+        new_counter = card_counter + direction if direction == 1 else card_counter - 1
+        # Bounds check BEFORE mutation
+        if new_counter < 0 or new_counter >= total:
+            return None
+        card_counter = new_counter
 
-    word_card = data["words"][card_counter]
+    print("counter: ", card_counter)
+    await state.update_data(card_counter=card_counter)
+
+    word_card = words[card_counter]
     return word_card
 
 @router.callback_query(StateFilter(LearningStates.vocabulary), WordCardQuizCallback.filter()) #* no state here
@@ -123,7 +119,13 @@ async def word_cards(callback: CallbackQuery, callback_data: WordCardQuizCallbac
         )
 
     word = await get_next_card(state, callback_data.direction)
-    text, kb = get_word_card(word)
+    if not word:
+        return  # Bounds check caught None
+
+    data = await state.get_data()
+    total = len(data.get("words", []))
+    current = data.get("card_counter", 0)
+    text, kb = get_word_card(word, current=current, total=total)
     
     await callback.message.edit_text(
         text=text,
@@ -152,24 +154,28 @@ async def translation_cards(callback: CallbackQuery, callback_data: TranslateQui
          await callback.answer("✅ Верно!", show_alert=True)
     elif callback_data.is_correct == False:
         await callback.answer(f"❌ Увы! Правильный ответ: **{callback_data.translation}**", show_alert=True)
-        #* adding failed word back to words list to display it again
-        await state.update_data(
-            words=data["words"] + [word for word in data["words"] if word.word_id == callback_data.word_id]
-        )
+        #* move failed word to the end, reset counter to show it again later (box=1 auto-reviews)
+        failed_word = next((w for w in data["words"] if w.word_id == callback_data.word_id), None)
+        if failed_word:
+            remaining_words = [w for w in data["words"] if w.word_id != callback_data.word_id]
+            await state.update_data(words=[failed_word] + remaining_words, card_counter=0)
 
     user_word = await wls.update_user_word_progress(user_id, callback_data.word_id, callback_data.is_correct)
     print("box level:", user_word.box, "next_review: ", user_word.next_review)
 
     #* init of pages
     word = await get_next_card(state)
-    text, kb = get_translation_card(word)
+    if word:
+        current = data.get("card_counter", 0)
+        total = len(data.get("words", []))
+        text, kb = get_translation_card(word, current=current, total=total)
+    else:
+        text, kb = get_translation_card(None)
 
     await callback.message.edit_text(
         text=text,
         reply_markup=kb
     )
-
-
 
 
 

@@ -197,4 +197,19 @@ class VocabularyRepo(BaseRepo):
         result = await self.session.execute(stmt)
         return result.scalar()
 
+    async def get_srs_queue_count(self, user_id: int) -> int:
+        """
+        Returns count of user words in SRS queue (box < MAX_BOX_LEVEL, next_review <= now).
+        Used by Zero-Debt gate.
+        """
+        from app.core.services.words_learning import MAX_BOX_LEVEL
+        now = datetime.now()
+        stmt = select(func.count(UserWord.id)).where(
+            UserWord.user_id == user_id,
+            UserWord.box < MAX_BOX_LEVEL,
+            UserWord.next_review <= now
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
     

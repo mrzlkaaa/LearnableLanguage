@@ -4,71 +4,98 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from app.states import OnboardingStates
-from app.keyboards.for_onboarding import get_placement_test_kb, get_goal_menu, get_active_time_menu
+from app.keyboards.for_onboarding import (
+    get_goal_menu, get_words_per_day_menu, get_reminder_frequency_menu,
+    get_active_hours_menu, get_topics_menu, get_placement_test_kb
+)
+from app.keyboards.for_base_navigation import back_inline
 from app.handlers.user_main import get_main_menu
 
 router = Router(name="onboarding")
 
-# 1.sTART
+# 1. GOAL
 @router.message(F.text == "📎 Анкетирование")
 async def process_goal(message: Message, state: FSMContext):
     await state.set_state(OnboardingStates.waiting_for_goal)
-    
     await message.answer(
         "Анкета содержит только необходимую для продуктивной работы информацию\n"
-        "🏆**Какая у тебя цель изучения языка?**\n",
+        "🏆 **Какая у тебя цель изучения языка?**\n",
         reply_markup=get_goal_menu()
     )
 
 @router.message(OnboardingStates.waiting_for_goal)
-async def process_goal(message: Message, state: FSMContext):
-    
+async def process_goal_answer(message: Message, state: FSMContext):
     await state.update_data(goal=message.text)
-    
+    await state.set_state(OnboardingStates.waiting_for_words_per_day)
     await message.answer(
-        "Принял. ⏰ **В какое время тебе удобно заниматься?**\n",
-        reply_markup=get_active_time_menu()
+        "📚 **Сколько новых слов в день ты готов учить?**",
+        reply_markup=get_words_per_day_menu()
     )
-    await state.set_state(OnboardingStates.waiting_for_schedule)
 
-# 3. СОХРАНЕНИЕ ВРЕМЕНИ -> ЗАПУСК ТЕСТА
-@router.message(OnboardingStates.waiting_for_schedule)
-async def start_placement_test(message: Message, state: FSMContext, user_repo):
-    await state.update_data(active_time=message.text)
-    # Сохраняем настройки в БД (создаем юзера с дефолтным уровнем A1 пока что)
-    # data = await state.get_data()
-    # await user_repo.create_user(..., settings={"goal": data['goal'], "time": message.text})
-    
+# 2. WORDS PER DAY
+@router.message(OnboardingStates.waiting_for_words_per_day)
+async def process_words_per_day(message: Message, state: FSMContext):
+    await state.update_data(words_per_day=message.text)
+    await state.set_state(OnboardingStates.waiting_for_reminder_frequency)
     await message.answer(
-        "Окей, профиль создан! 🚀\n\n"
+        "⏰ **Как часто тебе удобно повторять слова?**",
+        reply_markup=get_reminder_frequency_menu()
+    )
+
+# 3. REMINDER FREQUENCY
+@router.message(OnboardingStates.waiting_for_reminder_frequency)
+async def process_reminder_frequency(message: Message, state: FSMContext):
+    await state.update_data(reminder_frequency=message.text)
+    await state.set_state(OnboardingStates.waiting_for_active_hours)
+    await message.answer(
+        "🌅 **В какое время суток тебе удобно заниматься?**",
+        reply_markup=get_active_hours_menu()
+    )
+
+# 4. ACTIVE HOURS
+@router.message(OnboardingStates.waiting_for_active_hours)
+async def process_active_hours(message: Message, state: FSMContext):
+    await state.update_data(active_hours=message.text)
+    await state.set_state(OnboardingStates.waiting_for_topics)
+    await message.answer(
+        "🎯 **Какие темы тебе интересны?**\n"
+        "(Выбери несколько или напиши свои)",
+        reply_markup=get_topics_menu()
+    )
+
+# 5. TOPICS
+@router.message(OnboardingStates.waiting_for_topics)
+async def process_topics(message: Message, state: FSMContext):
+    await state.update_data(topics=message.text)
+    await state.set_state(OnboardingStates.placement_test)
+    await message.answer(
+        "Отлично! 🚀\n\n"
         "Теперь давай определим твой уровень. "
-        "Ответь на пару вопросов, только честно, не гугли!."
+        "Ответь на пару вопросов — только честно, не гугли!"
     )
-    
-    # # Инициализируем тест (в реале берем вопросы из БД PlacementQuestion)
-    # # Для примера хардкод:
-    # test_questions = [
-    #     {"q": "I ___ to school yesterday.", "opts": ["go", "went", "gone"], "correct": 1, "level": "A1"},
-    #     {"q": "If I ___ rich, I would buy a car.", "opts": ["was", "were", "am"], "correct": 1, "level": "B1"},
-    #     # ... еще вопросы
-    # ]
-    
-    # # Сохраняем вопросы и текущий индекс в FSM
-    # await state.update_data(test_data=test_questions, current_q=0, score=0)
-    
-    # # Показываем первый вопрос
-    # await send_question(message, test_questions[0])
-    # await state.set_state(OnboardingStates.placement_test)
+    # Загружаем вопросы из БД
+    from app.database.repo.onboarding import OnboardingRepo
+    from app.database.base import Database
+    db = Database()
+    async with db.session() as session:
+        onboarding_repo = OnboardingRepo(session)
+        questions = await onboarding_repo.get_placement_questions()
+    if not questions:
+        # Fallback если нет вопросов в БД
+        questions = [
+            {"q": "I ___ to school yesterday.", "opts": ["go", "went", "gone"], "correct": 1, "level": "A1"},
+            {"q": "If I ___ rich, I would buy a car.", "opts": ["was", "were", "am"], "correct": 1, "level": "B1"},
+        ]
+    await state.update_data(test_data=questions, current_q=0, score=0)
+    await send_question(message, questions[0])
 
-# Вспомогательная функция отправки вопроса
 async def send_question(message: Message, question_data: dict):
     kb = get_placement_test_kb(question_data['opts'])
     await message.answer(f"❓ **Level Check**\n\n{question_data['q']}", reply_markup=kb)
 
-# 4. ОБРАБОТКА ОТВЕТОВ ТЕСТА
+# 6. PLACEMENT TEST ANSWERS
 @router.callback_query(OnboardingStates.placement_test, F.data.startswith("pt_ans:"))
 async def process_test_answer(callback: CallbackQuery, state: FSMContext, user_repo):
-    # Парсим ответ
     selected_index = int(callback.data.split(":")[1])
     
     data = await state.get_data()
@@ -76,30 +103,34 @@ async def process_test_answer(callback: CallbackQuery, state: FSMContext, user_r
     current_idx = data['current_q']
     current_score = data['score']
     
-    # Проверка ответа
     correct_index = questions[current_idx]['correct']
     if selected_index == correct_index:
         current_score += 1
-        # Можно давать фидбек, но на тесте уровня лучше молчать или просто "Accepted"
-        await callback.answer("Accepted!")
+        await callback.answer("✅ Accepted!")
     else:
-        await callback.answer("Accepted!")
+        await callback.answer("✅ Accepted!")
 
-    # Следующий вопрос или конец?
     next_idx = current_idx + 1
     
     if next_idx < len(questions):
-        # Следующий вопрос
         await state.update_data(current_q=next_idx, score=current_score)
-        # Удаляем старый (красота интерфейса)
         await callback.message.delete()
         await send_question(callback.message, questions[next_idx])
     else:
-        # КОНЕЦ ТЕСТА
         final_level = calculate_level(current_score, len(questions))
         
-        # Обновляем уровень в БД
-        # await user_repo.update_level(callback.from_user.id, final_level)
+        # Сохраняем все настройки в БД
+        user_id = callback.from_user.id
+        settings = {
+            "goal": data.get("goal", ""),
+            "words_per_day": data.get("words_per_day", ""),
+            "reminder_frequency": data.get("reminder_frequency", ""),
+            "active_hours": data.get("active_hours", ""),
+            "topics": data.get("topics", ""),
+            "cefr_level": final_level,
+            "onboarding_completed": True
+        }
+        await user_repo.update_settings(user_id, settings)
         
         await callback.message.delete()
         await callback.message.answer(
@@ -111,7 +142,6 @@ async def process_test_answer(callback: CallbackQuery, state: FSMContext, user_r
         await state.clear()
 
 def calculate_level(score, total):
-    """Простая логика расчета (можно усложнить)"""
     percentage = score / total
     if percentage < 0.3: return "A1"
     if percentage < 0.6: return "A2"

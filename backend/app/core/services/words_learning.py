@@ -40,6 +40,13 @@ class WordsLearningService:
         user_id: int,
         num_words:int = 100
     ) -> list[WordCardDTO] | None:
+        # 🆕 Zero-Debt Gate
+        srs_queue_count = await self.vocab.get_srs_queue_count(user_id)
+        ZERO_DEBT_THRESHOLD = 15
+        if srs_queue_count > ZERO_DEBT_THRESHOLD:
+            logger.info(f"Zero-Debt gate: user {user_id} has {srs_queue_count} words pending")
+            return None
+
         words = []
         for _ in range(num_words):
             new_word = await self.get_new_global_word(user_id)

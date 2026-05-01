@@ -66,16 +66,26 @@ def get_word_learnings(word_id: int | None = None):
     return builder.as_markup()
 
 
-def get_card_navigation(word_id):
+def get_card_navigation(word_id, current: int = 0, total: int = 0):
     builder = InlineKeyboardBuilder()
     
-    builder.button(
-        text="Предыдущая ⬅️",
-        callback_data=WordCardQuizCallback(
-            word_id=word_id,
-            direction=0 
+    if current > 0:
+        builder.button(
+            text="Предыдущая ⬅️",
+            callback_data=WordCardQuizCallback(
+                word_id=word_id,
+                direction=0 
+            )
         )
-    )
+    else:
+        builder.button(
+            text="⬅️ Начало",
+            callback_data=WordCardQuizCallback(
+                word_id=word_id,
+                direction=0
+            )
+        )
+
     builder.button(
         text="Следующая ➡️",
         callback_data=WordCardQuizCallback(
@@ -92,26 +102,26 @@ def get_card_navigation(word_id):
     return builder.as_markup()
 
 
-def get_word_card(word: WordCardDTO | None = None):
+def get_word_card(word: WordCardDTO | None = None, current: int = 0, total: int = 0):
     builder = InlineKeyboardBuilder()
     text = f"<b>Карточки для изучения закончились</b>\nДождись новых или переходи к другим секциям, удачи!"
 
     if word:
-        rand_int = random.randint(0, 1)
+        progress = f"🔢 Карточка {current + 1} из {total}\n"
+        progress_bar = "".join(["🟩" if i < current else "🟦" for i in range(total)])
+        if total > 1:
+            text = f"{progress}{progress_bar}\n\n"
 
-        text = ( f"🇬🇧 <b>{word.word_text.upper()}</b> <code>[{word.transcription}]</code>\n"
+        rand_int = random.randint(0, 1)
+        text += ( f"🇬🇧 <b>{word.word_text.upper()}</b> <code>[{word.transcription}]</code>\n"
         + f"🇷🇺 <b>{word.translation}</b>\n\n"
         + f"🧠 <b>Context:</b>\n"
         + f" — <i>{word.examples['en'][rand_int].replace(word.word_text, f'<b>{word.word_text}</b>')}</i>\n"
         + f"({word.examples['ru'][rand_int]})\n\n"
-        + f"💡 <b>Tip:</b> {word.tip["en"]}\n({word.tip["ru"]})"
+        + f"💡 <b>Tip:</b> {word.tip['en']}\n({word.tip['ru']})"
         )
 
-        #* arrows for nav
-        #* cancel
-        #* main menu
-        kb = get_card_navigation(word.word_id)
-
+        kb = get_card_navigation(word.word_id, current=current, total=total)
         return text, kb
     
     builder.add(
@@ -122,26 +132,26 @@ def get_word_card(word: WordCardDTO | None = None):
 
     return text, builder.as_markup()
 
-def get_translation_card(word: WordCardDTO | None = None):
-
+def get_translation_card(word: WordCardDTO | None = None, current: int = 0, total: int = 0):
     builder = InlineKeyboardBuilder()
     text = f"<b>Переводные карточки для изучения закончились</b>\nДождись новых или переходи к другим секциям, удачи!"
 
     if word:
+        progress = f"🔢 Карточка {current + 1} из {total}\n"
+        progress_bar = "".join(["🟩" if i < current else "🟦" for i in range(total)])
+        if total > 1:
+            text = f"{progress}{progress_bar}\n\n"
+
         direction = random.randint(0, 1)
-        # 1. Определяем правильный ответ и список неправильных
         if direction:
-            text = f"🇬🇧 <b>Как переводится слово?</b>\n\n🔹 <b>{word.word_text}</b>\n<i>({word.transcription})</i>"
+            text += f"🇬🇧 <b>Как переводится слово?</b>\n\n🔹 <b>{word.word_text}</b>\n<i>({word.transcription})</i>"
             correct_ans = word.translation
-            # Берем русские дистракторы из JSON
             wrong_answers = word.distractors.get("ru") 
         else:
-            text = f"🇷🇺 <b>Выбери верный перевод:</b>\n\n🔹 <b>{word.translation.capitalize()}</b>"
+            text += f"🇷🇺 <b>Выбери верный перевод:</b>\n\n🔹 <b>{word.translation.capitalize()}</b>"
             correct_ans = word.word_text
-            # Берем английские дистракторы из JSON
             wrong_answers = word.distractors.get("en") 
 
-        #* text & callback_data pairs for kb
         text_callback = [(correct_ans, 1)] + [(wrong_answer, 0) for wrong_answer in wrong_answers[:3]]
         random.shuffle(text_callback)
 
@@ -154,7 +164,6 @@ def get_translation_card(word: WordCardDTO | None = None):
                     translation=correct_ans if not callback else None
                 ) 
             )
-
 
     builder.add(
         vocab_menu_inline,

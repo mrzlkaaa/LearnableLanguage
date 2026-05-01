@@ -31,6 +31,18 @@ class UserRepo(BaseRepo):
         await self.session.commit()
         return new_user
 
+    async def update_settings(self, tg_id: int, settings: dict):
+        """
+        Updates user settings JSON field.
+        Used by onboarding to persist all user preferences.
+        """
+        stmt = select(User).where(User.id == tg_id)
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.settings = settings
+            await self.session.commit()
+
     # async def add_xp(self, tg_id: int, points: int):
     #     user = await self.get(tg_id) # Допустим, метод get есть
     #     if user:

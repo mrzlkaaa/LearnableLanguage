@@ -14,6 +14,7 @@ from app.middlewares.db import DbSessionMiddleware
 from app.database.base import init_models
 from app.core.services.words_supply import WordsSupplyService
 from app.core.services.words_tutor import AITutorService
+from app.core.clients import GeminiClient
 from app.database.repo.vocabulary import VocabularyRepo
 from app.core.services.words_tutor import LEVELS
 from app.core.services.notifications import NotificationManager

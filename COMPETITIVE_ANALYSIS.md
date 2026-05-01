@@ -292,8 +292,69 @@ MAX_BOX_LEVEL = 6
 | **W2** | Добавить прогресс-бар "Карточка 3 из 10" | Один из главных UX-фидбеков | 1h |
 | **W3** | Деактивировать "Предыдущая" на первой карточке | Простая проверка, большой UX | 30min |
 | **W4** | Показать статистику при "Карточки закончились" | "Пройдено: 10, Верно: 8" | 1h |
+| **W5** | **Полноценный онбординг (A5)** | Юзер не может настроить: слова/день, напоминания, время | 3-4h |
 
-### 6.2 Killer Feature Implementation (CSRS)
+### 6.1b Онбординг — Детализация A5
+
+**Текущий onboarding.py умеет только:**
+- ✅ Принимает цель текстом
+- ✅ Принимает время текстом
+- ✅ Placement test — закомментирован, не работает
+- ❌ Нет выбора слов/день, напоминаний, расписания
+
+**Новый flow (7 шагов):**
+```
+/start
+  ↓
+[Goal] "Какая цель?" — inline buttons: ЕГЭ / Разговорный / Работа / IELTS
+  ↓
+[Words per day] "Сколько слов в день?" — 3 / 5 / 10
+  ↓
+[Reminder frequency] "Как часто напоминать?" — 1 / 2 / 3 раза в день
+  ↓
+[Active hours] "Когда заниматься?" — утро 9:00 / день 14:00 / вечер 20:00
+  ↓
+[Topics] "Какие темы интересны?" — multiple select: Tech / Business / Travel / etc.
+  ↓
+[Placement Test] Тест уровня (~10 вопросов, 5-10 минут)
+  ↓
+[Result] "Твой уровень: B2! Погнали!"
+  ↓
+→ main menu
+```
+
+**Что добавить в FSM:**
+```python
+class OnboardingStates(StatesGroup):
+    waiting_for_goal = State()           # ✅ Есть
+    waiting_for_schedule = State()        # ✅ Есть
+    waiting_for_words_per_day = State()   # 🆕 Новое
+    waiting_for_reminder_freq = State()   # 🆕 Новое
+    waiting_for_active_hours = State()   # 🆕 Новое
+    waiting_for_topics = State()         # 🆕 Новое
+    placement_test = State()             # ✅ Есть, но не работает
+```
+
+**User.settings schema:**
+```python
+settings = {
+    "goal": "Разговорный",
+    "words_per_day": 5,
+    "reminder_frequency": 3,  # times per day
+    "active_hours": {"start": 9, "end": 21},
+    "timezone": "Asia/Novosibirsk",
+    "level": "B2",
+    "topics": ["Technology", "Business", "Travel"]
+}
+```
+
+**NotificationManager integration:**
+```python
+# Использовать user.settings для APScheduler:
+# - reminder_frequency определяет кол-во напоминаний в день
+# - active_hours определяет окна для напоминаний
+# - words_per_day ограничивает новые слова в день
+```
 
 Приоритет — **реализовать смену механики по уровню SRS**:
 

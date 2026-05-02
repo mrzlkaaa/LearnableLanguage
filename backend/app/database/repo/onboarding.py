@@ -3,12 +3,7 @@ from app.database.models import PlacementTestQuestion
 from app.database.base import BaseRepo
 
 
-class QuizRepo(BaseRepo):
-    """
-    Repository for quiz-related data access.
-    Currently serves placement test questions for onboarding.
-    """
-
+class OnboardingRepo(BaseRepo):
     async def get_placement_questions(self, limit: int = 10) -> list[dict]:
         """
         Returns placement test questions as dicts for onboarding.
